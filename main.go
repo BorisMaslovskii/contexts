@@ -45,12 +45,14 @@ func main(){
 			select {
 			case s := <-ch:
 				fmt.Print(s+"\n")
+				<- time.After(time.Second)
 			// Ловим остановку контекста (остановку сервера) и дочитываем из канала оставшиеся сообщения если они там есть
 			case <-chDone:
 				if len(ch) == 0{
 					fmt.Print("server stopped, channel is empty, finish" + "\n")
 					return
 				}
+				fmt.Print("server stopped, channel is not empty, continue" + "\n")
 				<- time.After(time.Second)
 			default:
 			}
