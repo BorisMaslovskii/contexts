@@ -39,6 +39,7 @@ func main(){
 	wg.Add(1)
 	// Горутина, которая считывает с канала значения, которые туда помещают хэндлеры сервера
 	go func(context.Context, chan string){
+		defer wg.Done()
 		chDone := ctxMain.Done()
 		for{
 			select {
@@ -47,7 +48,6 @@ func main(){
 			// Ловим остановку контекста (остановку сервера) и дочитываем из канала оставшиеся сообщения если они там есть
 			case <-chDone:
 				fmt.Print("server stopped the main context" + "\n")
-				wg.Done()
 				if len(ch) == 0{
 					return
 				} else {
@@ -55,6 +55,7 @@ func main(){
 						s := <-ch
 						fmt.Print(s+"\n")
 					}
+					return
 				}
 			default:
 			}
