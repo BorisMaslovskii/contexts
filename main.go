@@ -47,16 +47,11 @@ func main(){
 				fmt.Print(s+"\n")
 			// Ловим остановку контекста (остановку сервера) и дочитываем из канала оставшиеся сообщения если они там есть
 			case <-chDone:
-				fmt.Print("server stopped the main context" + "\n")
 				if len(ch) == 0{
-					return
-				} else {
-					for i:=0; i<len(ch); i++{
-						s := <-ch
-						fmt.Print(s+"\n")
-					}
+					fmt.Print("server stopped, channel is empty, finish" + "\n")
 					return
 				}
+				<- time.After(time.Second)
 			default:
 			}
 		}
