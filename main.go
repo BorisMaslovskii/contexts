@@ -2,79 +2,77 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	//"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	echo "github.com/labstack/echo/v4"
+	tomb "gopkg.in/tomb.v2"
 )
 
 // Service Структура, чтобы передавать канал в хэндлеры
-type Service struct{
-	ch chan string
+type Service struct {
+	ch   chan string
+	tomb *tomb.Tomb
 }
 
-func(s Service) Handler(c echo.Context) error {
+func (s *Service) Handler(c echo.Context) error {
 	s.ch <- c.Request().Host
 	return c.String(http.StatusOK, "Hello, this is a contexts sample!")
 }
 
-func main(){
+type Server struct {
+	echo *echo.Echo
+	tomb *tomb.Tomb
+}
 
-	// Главный контекст программы, его закроет горунтина, которая остановит сервис и его зыкрытие отследит горутина, которая читает с канала
-	ctxMain, cancelMain := context.WithCancel(context.Background())
+func (s *Server) Start() error {
+	return s.echo.Start(":8080")
+}
+
+func (s *Server) Stop() error {
+	if err := s.echo.Shutdown(context.Background()); err != nil {
+		s.echo.Logger.Error(err)
+	}
+	s.tomb.Kill(nil)
+	return s.tomb.Wait()
+}
+
+func (s *Service) Start() error {
+	for {
+		select {
+		case x := <-s.ch:
+			fmt.Print(x + "\n")
+			<-time.After(time.Second)
+		case <-s.tomb.Dying():
+			if len(s.ch) == 0 {
+				return errors.New(fmt.Sprint("server stopped, channel is empty, finish" + "\n"))
+			}
+			fmt.Print("server stopped, channel is not empty, continue" + "\n")
+		default:
+		}
+	}
+}
+
+func main() {
 	// Канал в который пишут все хэндлеры и с которого читает одна постоянная горутина
 	ch := make(chan string, 100)
+	t := tomb.Tomb{}
 
-	s := Service{ch}
+	// background сервис который взаимодействует с http запросами
+	service := &Service{ch, &t}
 
 	e := echo.New()
-	e.GET("/", s.Handler)
+	e.GET("/", service.Handler)
 
-	// WaitGroup чтобы программа дождалась завершения работы постоянной горутины
-	wg := sync.WaitGroup{}
+	server := &Server{e, &t}
 
-	wg.Add(1)
-	// Горутина, которая считывает с канала значения, которые туда помещают хэндлеры сервера
-	go func(context.Context, chan string){
-		defer wg.Done()
-		chDone := ctxMain.Done()
-		for{
-			select {
-			case s := <-ch:
-				fmt.Print(s+"\n")
-				<- time.After(time.Second)
-			// Ловим остановку контекста (остановку сервера) и дочитываем из канала оставшиеся сообщения если они там есть
-			case <-chDone:
-				if len(ch) == 0{
-					fmt.Print("server stopped, channel is empty, finish" + "\n")
-					return
-				}
-				fmt.Print("server stopped, channel is not empty, continue" + "\n")
-				<- time.After(time.Second)
-			default:
-			}
-		}
-	}(ctxMain, ch)
-
-	go func(){
-		e.Logger.Error(e.Start(":8080"))
-	}()
+	t.Go(service.Start)
+	t.Go(server.Start)
 
 	// Остановка сервера через 5 секунд
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	<- time.After(5*time.Second)
-	if err := e.Shutdown(ctx); err != nil {
-		e.Logger.Fatal(err)
-	}
-
-	// time.After если я просто даю таймаут, чтобы горутина считала все с канала
-	//<- time.After(5*time.Second)
-
-	cancel()
-	cancelMain()
-
-	wg.Wait()
+	<-time.After(5 * time.Second)
+	err := server.Stop()
+	fmt.Println(err)
 }
