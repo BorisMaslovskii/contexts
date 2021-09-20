@@ -56,11 +56,11 @@ func (s *Service) Start() error {
 }
 
 func main() {
-	// Канал в который пишут все хэндлеры и с которого читает одна постоянная горутина
+	// Every handler writes to this channel and one background goroutine reads from it
 	ch := make(chan string, 100)
 	t := tomb.Tomb{}
 
-	// background сервис который взаимодействует с http запросами
+	// background service
 	service := &Service{ch, &t}
 
 	e := echo.New()
@@ -71,7 +71,7 @@ func main() {
 	t.Go(service.Start)
 	t.Go(server.Start)
 
-	// Остановка сервера через 5 секунд
+	// stop server after 5 seconds
 	<-time.After(5 * time.Second)
 	err := server.Stop()
 	fmt.Println(err)
